@@ -1,0 +1,67 @@
+name: ubuntu-gmake2
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Cache Qt
+      id: cache-qt
+      uses: actions/cache@v1
+      with:
+        path: ../Qt
+        key: QtCache-ubuntu-5.15.0
+          
+    - name: Installing Qt - 5.15.0
+      uses: jurplel/install-qt-action@v2
+      with:
+        version: '5.15.0'
+        modules: qtcharts qtwidgets qtgui qtcore
+        install-deps: true
+        cached: ${{ steps.cache-qt.outputs.cache-hit }}
+
+    - name: apt-get update
+      run: sudo apt-get update -y
+
+    - name: apt-get qt5-default qtbase5-dev qtbase5-dev-tools
+      run: |
+        #sudo apt-get install -y qt5-default qtbase5-dev qtbase5-dev-tools
+        echo $Qt5_DIR/bin
+        #ls -la $Qt5_DIR/bin
+        #echo $Qt5_DIR/lib
+        #ls -la $Qt5_DIR/lib
+        moc --help
+
+    - name: checkout premake5
+      uses: actions/checkout@v2
+      with:
+        repository: premake/premake-core
+        path: premake-build
+
+    - name: Build premake5
+      run: |
+        cd premake-build
+        make -f Bootstrap.mak linux CONFIG=release
+        cp bin/release/premake5 ../tests
+        cd ..
+        rm -Rf premake-build
+
+    - name: test old
+      run: |
+        cd tests
+        PATH=$PATH:`pwd` ./test_projects.sh premake5 gmake2 premake5.lua --qt-root=$Qt5_DIR
+        cd ..
+
+    - name: test qt
+      run: |
+        cd tests
+        PATH=$PATH:`pwd` ./test_projects.sh premake5 gmake2 premake5-qt.lua --qt-root=$Qt5_DIR
+        cd ..
