@@ -181,6 +181,35 @@ premake.api.register {
 }
 
 --
+-- Specify uri of module for qml
+--
+premake.api.register {
+	name = "qmlmoduleuri",
+	scope = "project",
+	kind = "string"
+}
+
+--
+-- Specify major version of module for qml
+--
+premake.api.register {
+	name = "qmlmodulemajorversion",
+	scope = "project",
+	kind = "integer",
+	default = 1
+}
+
+--
+-- Specify minor version of module for qml
+--
+premake.api.register {
+	name = "qmlmoduleminorversion",
+	scope = "project",
+	kind = "integer",
+	default = 0
+}
+
+--
 -- This command is used to tell Qt tools to store their command line arguments
 -- in a file if the size of the command line is greater than the limit
 --

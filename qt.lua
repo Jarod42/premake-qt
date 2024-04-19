@@ -374,6 +374,11 @@ function premake.extensions.qt.customAddGeneratedFiles(base, wks)
 		end
 	end
 	base(wks)
+	for prj in premake.workspace.eachproject(wks) do
+		for cfg in premake.project.eachconfig(prj) do
+			premake.extensions.qt.AddQmlRegistrar(cfg)
+		end
+	end
 end
 
 --
@@ -418,8 +423,11 @@ function premake.extensions.qt.customAddFileConfig(node, cfg)
 		qt.addTSCustomBuildRule(config, cfg)
 
 	-- moc files
-	elseif qt.needMOC(config.abspath) then
-		qt.addMOCCustomBuildRule(config, cfg)
+	else
+		local need_moc, has_qml_element = qt.needMOC(config.abspath)
+		if need_moc then
+			qt.addMOCCustomBuildRule(config, cfg, has_qml_element)
+		end
 
 	end
 
@@ -635,6 +643,7 @@ end
 function premake.extensions.qt.needMOC(filename)
 
 	local needmoc = false
+	local has_qml_element = false
 
 	-- only handle headers
 	if path.iscppheader(filename) then
@@ -650,14 +659,26 @@ function premake.extensions.qt.needMOC(filename)
 					break
 				end
 			end
+			-- scan it to find 'QML_ELEMENT' or 'QML_NAMED_ELEMENT' or QML_ANONYMOUS or QML_INTERFACE
+			for line in file:lines() do
+				if line:find("^%s*QML_ANONYMOUS") 
+					or line:find("^%s*QML_ELEMENT") 
+					or line:find("^%s*QML_INTERFACE") 
+					or line:find("^%s*QML_NAMED_ELEMENT") 
+				then
+					has_qml_element = true
+					break
+				end
+			end
 
 			io.close(file)
 		end
 	end
-
-	return needmoc
+	if has_qml_element and not needmoc then
+		premake.warn('QML_ELEMENT/QML_ELEMENT_NAME present, but missing Q_OBJECT/Q_GADGET in ' .. filename)
+	end
+	return needmoc, has_qml_element
 end
-
 
 --
 -- Adds the custom build for a moc'able file.
@@ -666,8 +687,10 @@ end
 --		The config for a single file.
 -- @param cfg
 --		The config of the project ?
+-- @param has_qml_element
+--      True if extra work has to be done to register class
 --
-function premake.extensions.qt.addMOCCustomBuildRule(fcfg, cfg)
+function premake.extensions.qt.addMOCCustomBuildRule(fcfg, cfg, has_qml_element)
 
 	local qt = premake.extensions.qt
 
@@ -680,6 +703,27 @@ function premake.extensions.qt.addMOCCustomBuildRule(fcfg, cfg)
 	-- create the command
 	local command = "\"" .. fcfg.config.qtbinpath .. "/moc\" \"" .. fcfg.relpath .. "\""
 	command = command .. " -o \"" .. path.getrelative(projectloc, output) .. "\""
+
+	local outputs
+	if has_qml_element then
+		if not cfg.qmlmoduleuri then
+			premake.error('Missing qmlmoduleuri for project "%s"', cfg.project.name)
+		end
+		if not cfg.qmlmodulemajorversion then
+			premake.error('Missing qmlmodulemajorversion for "%s"', cfg.project.name)
+		end
+		if not cfg.qmlmoduleminorversion then
+			premake.error('Missing qmlmoduleminorversion for "%s"', cfg.project.name)
+		end
+	
+		command = command .. " --output-json"
+
+		cfg.qmljsonfiles = cfg.qmljsonfiles or {}
+		table.insert(cfg.qmljsonfiles, output .. ".json")
+		outputs = { output, output .. ".json" }
+	else
+		outputs = { output }
+	end
 
 	-- if we have a precompiled header, prepend it
 	if fcfg.config.pchheader then
@@ -711,11 +755,55 @@ function premake.extensions.qt.addMOCCustomBuildRule(fcfg, cfg)
 	qt.addCustomCommand(fcfg, {
 		message	 = "Running moc on %{file.name}",
 		commands = { command },
-		outputs	 = { output },
+		outputs	 = outputs,
 		compile	 = true
 	})
 end
 
+--
+function premake.extensions.qt.AddQmlRegistrar(cfg)
+	if not cfg.qmljsonfiles or #cfg.qmljsonfiles == 0 then
+		return
+	end
+	
+	local output = path.join(premake.extensions.qt.getGeneratedDir(cfg), "qmlregistrar.cpp")
+--	local qmljsonfiles = premake.project.getrelative(cfg.project, cfg.qmljsonfiles)
+	local command_json = '"' .. cfg.qtbinpath .. '/qmltyperegistrar" -o %[' .. output .. '] --import-name "' .. cfg.qmlmoduleuri
+		.. '" --major-version ' .. cfg.qmlmodulemajorversion
+		.. ' --minor-version ' .. cfg.qmlmoduleminorversion
+		.. ' ' .. table.implode(cfg.qmljsonfiles, "%[", "]", " ")
+	local node = cfg.project._.files[cfg.qmljsonfiles[1]]
+	local source = premake.fileconfig.getconfig(node, cfg)
+
+	premake.extensions.qt.addCustomCommand(source,
+	{
+		message = "Running registrar on qml types",
+		commands = { command_json },
+		outputs = { output },
+		inputs = cfg.qmljsonfiles,
+		compile = true
+	})
+
+	-- mimic oven.addGeneratedFiles.addGeneratedFile
+	-- As that part might be done after oven.addGeneratedFiles
+	local files = cfg.project._.files
+	local node = files[output]
+	if not node then
+		node = premake.fileconfig.new(output, cfg.project)
+		files[output] = node
+		table.insert(files, node)
+	end
+
+	-- always overwrite the dependency information.
+	node.dependsOn = source
+	node.generated = true
+
+	-- add to config if not already added.
+	if not premake.fileconfig.getconfig(node, cfg) then
+		premake.fileconfig.addconfig(node, cfg)
+	end
+
+end
 
 --
 -- Checks if the command line will exceed the given size limit, and will output
