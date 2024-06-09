@@ -474,7 +474,10 @@ function premake.extensions.qt.addUICustomBuildRule(fcfg, cfg)
 	local output = qt.getGeneratedDir(cfg) .. "/ui_" .. fcfg.basename .. ".h"
 
 	-- build the command
-	local command = "\"" .. fcfg.config.qtbinpath .. "/uic\" -o \"" .. path.getrelative(fcfg.project.location, output) .. "\" \"" .. fcfg.relpath.. "\""
+	local qtversion = premake.extensions.qt.getVersion(cfg, cfg.qtincludepath)
+	local qtpath = cfg.qtpath or premake.extensions.qt.defaultpath
+	local qtbinpath = iif(premake.checkVersion(qtversion, "<6.1") or cfg.system == premake.WINDOWS, fcfg.config.qtbinpath, path.join(qtpath, "libexec"))
+	local command = "\"" .. qtbinpath .. "/uic\" -o \"" .. path.getrelative(fcfg.project.location, output) .. "\" \"" .. fcfg.relpath.. "\""
 
 	-- if we have custom commands, add them
 	table.foreachi(qt.combineArgs(fcfg.config.qtuicargs, fcfg.qtuicargs), function (arg)
@@ -520,7 +523,10 @@ function premake.extensions.qt.addQRCCustomBuildRule(fcfg, cfg)
 	local output = qt.getGeneratedDir(cfg) .. "/qrc_" .. fcfg.basename .. ".cpp"
 
 	-- build the command
-	local command = "\"" .. fcfg.config.qtbinpath .. "/rcc\" -name \"" .. fcfg.basename .. "\" -no-compress \"" .. fcfg.relpath .. "\" -o \"" .. path.getrelative(fcfg.project.location, output) .. "\""
+	local qtversion = premake.extensions.qt.getVersion(cfg, cfg.qtincludepath)
+	local qtpath = cfg.qtpath or premake.extensions.qt.defaultpath
+	local qtbinpath = iif(premake.checkVersion(qtversion, "<6.1") or cfg.system == premake.WINDOWS, fcfg.config.qtbinpath, path.join(qtpath, "libexec"))
+	local command = "\"" .. qtbinpath .. "/rcc\" -name \"" .. fcfg.basename .. "\" -no-compress \"" .. fcfg.relpath .. "\" -o \"" .. path.getrelative(fcfg.project.location, output) .. "\""
 
 	-- if we have custom commands, add them
 	table.foreachi(qt.combineArgs(fcfg.config.qtrccargs, fcfg.qtrccargs), function (arg)
@@ -683,7 +689,10 @@ function premake.extensions.qt.addMOCCustomBuildRule(fcfg, cfg)
 	local output = qt.getGeneratedDir(cfg) .. "/moc_" .. fcfg.basename .. ".cpp"
 
 	-- create the command
-	local command = "\"" .. fcfg.config.qtbinpath .. "/moc\" \"" .. fcfg.relpath .. "\""
+	local qtversion = premake.extensions.qt.getVersion(cfg, cfg.qtincludepath)
+	local qtpath = cfg.qtpath or premake.extensions.qt.defaultpath
+	local qtbinpath = iif(premake.checkVersion(qtversion, "<6.1") or cfg.system == premake.WINDOWS, fcfg.config.qtbinpath, path.join(qtpath, "libexec"))
+	local command = "\"" .. qtbinpath .. "/moc\" \"" .. fcfg.relpath .. "\""
 	command = command .. " -o \"" .. path.getrelative(projectloc, output) .. "\""
 
 	-- if we have a precompiled header, prepend it
